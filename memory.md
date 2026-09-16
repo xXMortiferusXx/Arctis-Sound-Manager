@@ -82,15 +82,18 @@ grep -i "Virtual\|hesuvi" ~/.local/state/wireplumber/stream-properties
 
 ## Technische Details (als Referenz)
 
-### ASM-Gefangene Falle: User-Unit-Symlink nach Rebuild
+### ASM-Service-Symlink nach Rebuild (GELÖST — Wartungs-Falle entfernt)
 
-Nach jedem `sudo nixos-rebuild switch` muss der User-Service-Symlink neu verlinkt werden:
+**Früher (manueller Symlink):** `~/.config/systemd/user/arctis-manager.service` zeigte auf einen NixOS-Store-Pfad. Nach jedem Rebuild änderte sich der Store-Hash, aber der Symlink wurde nicht automatisch aktualisiert. Solange die alte Store-Generation existierte (NixOS räumt erst bei `nix-collect-garbage` auf), lief der Dienst scheinbar problemlos — nach einem GC verweist der Symlink ins Leere → ASM bricht ohne ersichtlichen Grund.
+
+**Warum es nie auffiel:** User-Level-Symlink (`~/.config/systemd/user`) hat höhere Priorität als `/etc/systemd/user`. Selbst wenn NixOS die `/etc`-Ebene frisch aktualisierte, überdeckte der veraltete User-Link sie. Trotzdem funktionierte alles, solange der alte Store-Pfad noch existierte.
+
+**Fix (2026-09-16):** Den manuellen Symlink `~/.config/systemd/user/arctis-manager.service` **komplett entfernt** → systemd lädt die von NixOS verwaltete `/etc/systemd/user/arctis-manager.service`, die bei jedem `switch` automatisch den frischen Store-Pfad übernimmt. **Kein manuelles Neulinken mehr nötig.**
+
 ```bash
-# Neuen Store-Pfad finden
-NEW="/nix/store/$(ls /nix/store | grep 'unit-arctis-manager.service' | grep -v 'ALTSENDER_PFAD_TEIL' | head -1)/arctis-manager.service"
-ln -sfn "$NEW" ~/.config/systemd/user/arctis-manager.service
-systemctl --user daemon-reload
-systemctl --user restart arctis-manager
+# Der frühere (nicht mehr nötige) Workaround:
+# NEW="/nix/store/$(ls /nix/store | grep 'unit-arctis-manager.service' | ...)/arctis-manager.service"
+# ln -sfn "$NEW" ~/.config/systemd/user/arctis-manager.service
 ```
 
 ### WM/ASPCM-Kanal-Volume-Persistenz
