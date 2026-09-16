@@ -12,7 +12,7 @@ Dokumentation aller Änderungen, die wir an diesem Fork `xXMortiferusXx/Arctis-S
 | `1d4f0e9` | loopback: disable channelmix on 8ch captures so stereo isn't upmixed |
 | `38790d1` | **loopback: use channelmix.upmix=false instead of channelmix.disable on 8ch** |
 | `d67e88e` | **pw_quirks: stop WirePlumber from restoring HeSuVi effect-node volumes** |
-| *(offen)* | **sonar: per-channel Boost & Smart Volume (Option A)** |
+| `57f2b88` | **sonar: per-channel Boost & Smart Volume (Option A)** |
 
 *Fett = die commits, die im finalen Fork live sind.*
 
