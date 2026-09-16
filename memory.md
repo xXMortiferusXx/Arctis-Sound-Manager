@@ -36,10 +36,12 @@ Dokumentation aller Änderungen, die wir an diesem Fork `xXMortiferusXx/Arctis-S
 
 **Symptom:** Media-Kanal deutlich lauter als Game, obwohl gleiche Einstellungen.
 
-**Analyse:**
-1. *Zuerst verdächtigt:* Stereo-Source (2ch) wird von PipeWire's `channelmix.upmix=true` automatisch auf 7.1 hochskaliert (synthetisierte FC/LFE/RL/RR/SL/SR aus FL/FR). Diese korrelierten Kopien flossen durch die HeSuVi-HRTF-Faltung und summierten sich auf der LR-Mix-Ebene → massive Lautstärkeerhöhung.
-2. *Versuch `channelmix.disable=true`* (Commit `1d4f0e9`): Unterbindet den Channelmix komplett → **bricht alles** (kein Ton, kein Volume, kein Up/Down-Mix). WirePlumber knallt das 2↔8ch-Adaptionssystem ab.
+**Analyse (korrigiert):**
+1. *Erste Hypothese:* Stereo-Source (2ch) wird von PipeWire's `channelmix.upmix=true` automatisch auf 7.1 hochskaliert (synthetisierte FC/LFE/RL/RR/SL/SR aus FL/FR). Diese korrelierten Kopien flössen durch die HeSuVi-HRTF-Faltung und summierten sich auf der LR-Mix-Ebene → vermutete Lautstärkeerhöhung.
+2. *Versuch `channelmix.disable=true`* (Commit `1d4f0e9`): Unterbindet den Channelmix komplett → **bricht alles** (kein Ton, kein Volume, kein Up/Down-Mix). WirePlumber knallt das 2↔8ch-Adaptionssystem ab. → wieder zurückgezogen.
 3. *Finale Lösung `channelmix.upmix=false`* (Commit `38790d1`): Verhindert nur den Upmix (keine synthetische 2→7.1-Skalierung), hält den Mixer ansonsten am Leben. Stereo-Inhalte bleiben FL/FR, 7.1-Quellen weiterhin 8ch. **Dieser Commit ist live.**
+
+**Korrektur (Erkenntnis):** Der gemessene Lautstärkeunterschied Media vs. Game kam **nicht vom Upmix**, sondern von dem in **Punkt 3** beschriebenen WirePlumber-Stale-Value (`0.2927` am Game-HeSuVi-Output ≈ −10.7 dB). Nach dem Fix dort sind beide Kanäle identisch laut. `channelmix.upmix=false` bleibt trotzdem die bessere Lösung und ist live: Es verhindert, dass synthetische korrelierte Kanäle durch die HRTF-Faltung laufen (physikalisch sauberer, keine Energieaufregung auf den Zusatzkanälen). Die `upmix=false`-Entscheidung ist also unabhängig von der Lautstärke-Begründung gerechtfertigt — nur die ursprüngliche *Begründung* dafür war falsch.
 
 ---
 
