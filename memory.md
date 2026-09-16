@@ -12,6 +12,7 @@ Dokumentation aller Änderungen, die wir an diesem Fork `xXMortiferusXx/Arctis-S
 | `1d4f0e9` | loopback: disable channelmix on 8ch captures so stereo isn't upmixed |
 | `38790d1` | **loopback: use channelmix.upmix=false instead of channelmix.disable on 8ch** |
 | `d67e88e` | **pw_quirks: stop WirePlumber from restoring HeSuVi effect-node volumes** |
+| *(offen)* | **sonar: per-channel Boost & Smart Volume (Option A)** |
 
 *Fett = die commits, die im finalen Fork live sind.*
 
@@ -128,3 +129,34 @@ ASM speichert Volumes in `~/.config/arctis_manager/channel_volumes.json`:
 - EQ: Alle Bänder flach (0 dB), Media/Game identisch
 - HeSuVi beider Ketten: byte-identische Konfigurationsdateien
 - `effect_output.*` Volume: immer 1.0 (WP-Restore deaktiviert via `d67e88e`)
+
+---
+
+## 4. Per-Kanal Boost & Smart Volume (Option A)
+
+**Problem:** `sonar_boost.json` und `sonar_smart_volume.json` waren **flache** Einzelwerte
+(`{"enabled": …, "db": …}` / `{"enabled": …, "level": …, "loudness": …}`), die auf **alle**
+EQ-Kanäle gleichzeitig angewandt wurden. Ein Boost für den leisen Discord-Kumpel hat damit
+auch Game/Media/Aux laut gemacht — unbrauchbar. Smart Volume (SC4M-Kompressor) war dadurch
+global invasiv und zusätzlich mit `level: 0.0`-Default faktisch ein No-Op (Ratio 1:1 = Bypass).
+
+**Lösung (`gui/sonar_page.py`):**
+
+- Beide Dateien sind jetzt **per-Kanal-Dicts**: `{"game": {…}, "chat": {…}, "media": {…}, "aux": {…}}`.
+- `_load_boost(channel)` / `_save_boost(channel, state)` (analog `_load_smart_volume`/`_save_smart_volume`)
+  lesen/schreiben nur den jeweiligen Kanal.
+- **Migration**: `_read_boost_map()` / `_read_smart_map()` erkennen eine legacy Flat-Datei
+  (Top-Level-Key `enabled` + `db` bzw. `level`) und expandieren sie in-place auf alle Kanäle —
+  bestehende User-Werte bleiben erhalten (kein Datenverlust).
+- **Defaults geändert**: Boost `db: 3.0` (statt 0.0 — +3 dB beim Aktivieren direkt brauchbar),
+  Smart Volume `level: 50.0` (statt 0.0 — Kompressor tut beim Aktivieren tatsächlich etwas).
+- Widgets (`BoostVolumeWidget`, `SmartVolumeWidget`) nehmen `channel` und persistieren pro Kanal.
+- Apply-Pfade laden pro Kanal: `_ApplyWorker.run()` via `self._channel`, `_ApplyAllWorker.run()`
+  via `channel` in der Loop. Micro-Chain bekommt `boost_db=0.0` (kein Boost-Widget dort).
+- Aux-Widgets waren vorher **nicht** mit `_on_boost_changed`/`_on_smart_changed` verbunden
+  (nur game/media/chat) — jetzt sind sie es, sonst hätte Aux seine per-Kanal-Slider gespeichert
+  aber nie angewandt.
+
+**Effekt:** Chat-Boost (+X dB) setzt die Sprecher vom Spiel ab, ohne Game/Media zu verändern;
+Smart Volume komprimiert nur den gewählten Kanal. `sc4m_1916.so` (swh-plugins) ist auf nex
+vorhanden (`/usr/lib/ladspa/` + nix-store), Smart Volume funktioniert also wirklich.
