@@ -63,13 +63,17 @@ def _isolated_proc_root(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path
 
 @pytest.fixture
 def media_spec() -> LoopbackSpec:
-    """The validated Media channel spec (matches the command in the plan)."""
+    """The Sonar-mode Media channel spec (8ch 7.1 — feeds the 8ch HeSuVi chain)."""
     return LoopbackSpec(
         channel="media",
         capture_name="Arctis_Media",
         playback_name="Arctis_Media_sink_out",
         target="effect_input.sonar-media-eq",
         description="Arctis Nova Pro Wireless Media",
+        capture_channels=8,
+        capture_position="FL FR FC LFE RL RR SL SR",
+        playback_channels=8,
+        playback_position="FL FR FC LFE RL RR SL SR",
     )
 
 
@@ -81,6 +85,10 @@ def game_spec() -> LoopbackSpec:
         playback_name="Arctis_Game_sink_out",
         target="effect_input.sonar-game-eq",
         description="Arctis Nova Pro Wireless Game",
+        capture_channels=8,
+        capture_position="FL FR FC LFE RL RR SL SR",
+        playback_channels=8,
+        playback_position="FL FR FC LFE RL RR SL SR",
     )
 
 
@@ -167,18 +175,23 @@ class TestBuildArgv:
         argv = _build_pw_loopback_argv(media_spec)
         assert "media.class=Audio/Sink" in argv[1]
 
-    def test_capture_channels_2(self, media_spec: LoopbackSpec) -> None:
+    def test_capture_channels_8(self, media_spec: LoopbackSpec) -> None:
+        """Sonar-mode Media capture must advertise 8ch so a game/native 7.1
+        source can hand all channels through to the 8ch EQ → HeSuVi chain."""
         argv = _build_pw_loopback_argv(media_spec)
-        assert "audio.channels=2" in argv[1]
+        assert "audio.channels=8" in argv[1]
 
-    def test_capture_position_fl_fr(self, media_spec: LoopbackSpec) -> None:
+    def test_capture_position_7_1(self, media_spec: LoopbackSpec) -> None:
         argv = _build_pw_loopback_argv(media_spec)
-        assert "audio.position=[FL FR]" in argv[1]
+        assert "audio.position=[FL FR FC LFE RL RR SL SR]" in argv[1]
 
-    def test_capture_no_8ch(self, media_spec: LoopbackSpec) -> None:
-        """The capture side must never declare 8ch — PipeWire negotiates it."""
+    def test_playback_channels_8(self, media_spec: LoopbackSpec) -> None:
         argv = _build_pw_loopback_argv(media_spec)
-        assert "audio.channels=8" not in argv[1]
+        assert "audio.channels=8" in argv[2]
+
+    def test_playback_position_7_1(self, media_spec: LoopbackSpec) -> None:
+        argv = _build_pw_loopback_argv(media_spec)
+        assert "audio.position=[FL FR FC LFE RL RR SL SR]" in argv[2]
 
     # ── playback-props content ─────────────────────────────────────────────
 
@@ -253,6 +266,14 @@ class TestBuildArgv:
         assert "node.name=Arctis_Chat_sink_out" in argv[2]
         assert "node.target=effect_input.sonar-chat-eq" in argv[2]
         assert "target.object=effect_input.sonar-chat-eq" in argv[2]
+
+    def test_chat_stays_2ch(self, chat_spec: LoopbackSpec) -> None:
+        """Chat feeds the mono chat PCM path — it must never advertise 8ch."""
+        argv = _build_pw_loopback_argv(chat_spec)
+        assert "audio.channels=2" in argv[1]
+        assert "audio.position=[FL FR]" in argv[1]
+        assert "audio.channels=2" in argv[2]
+        assert "audio.position=[FL FR]" in argv[2]
 
     def test_custom_target_in_playback(self) -> None:
         """Verify that the target field is faithfully forwarded."""
@@ -535,6 +556,45 @@ class TestMakeSpecs:
         specs = make_specs(sonar=True, physical_game=self.PHYS_GAME, physical_chat=self.PHYS_CHAT)
         for spec in specs:
             assert "Arctis" in spec.description
+
+    def test_sonar_game_media_are_8ch(self) -> None:
+        """Sonar mode: Game/Media advertise and forward 8ch 7.1 so native
+        multichannel sources reach the 8ch EQ → HeSuVi chain intact."""
+        specs = make_specs(sonar=True, physical_game=self.PHYS_GAME, physical_chat=self.PHYS_CHAT)
+        positions = "FL FR FC LFE RL RR SL SR"
+        for spec in specs:
+            if spec.channel == "chat":
+                continue
+            assert spec.capture_channels == 8
+            assert spec.capture_position == positions
+            assert spec.playback_channels == 8
+            assert spec.playback_position == positions
+
+    def test_sonar_chat_stays_2ch(self) -> None:
+        specs = make_specs(sonar=True, physical_game=self.PHYS_GAME, physical_chat=self.PHYS_CHAT)
+        chat = next(s for s in specs if s.channel == "chat")
+        assert chat.capture_channels == 2
+        assert chat.capture_position == "FL FR"
+        assert chat.playback_channels == 2
+        assert chat.playback_position == "FL FR"
+
+    def test_simple_mode_all_2ch(self) -> None:
+        """Simple mode targets physical Stereo/Mono ALSA outputs — staying 2ch
+        preserves historical behaviour and needs no up-mixing."""
+        specs = make_specs(sonar=False, physical_game=self.PHYS_GAME, physical_chat=self.PHYS_CHAT)
+        for spec in specs:
+            assert spec.capture_channels == 2
+            assert spec.capture_position == "FL FR"
+            assert spec.playback_channels == 2
+            assert spec.playback_position == "FL FR"
+
+    def test_aux_is_8ch_when_enabled(self) -> None:
+        specs = make_specs(
+            sonar=True, physical_game=self.PHYS_GAME, physical_chat=self.PHYS_CHAT, aux=True,
+        )
+        aux_spec = next(s for s in specs if s.channel == "aux")
+        assert aux_spec.capture_channels == 8
+        assert aux_spec.capture_position == "FL FR FC LFE RL RR SL SR"
 
 
 # ── LoopbackManager.restart_dead ─────────────────────────────────────────────

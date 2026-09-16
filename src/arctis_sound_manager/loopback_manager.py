@@ -14,10 +14,16 @@ Routing overview (unchanged from static config):
     App → Arctis_<Ch> (capture / Audio/Sink) → [loopback] → Arctis_<Ch>_sink_out
          → effect_input.sonar-<ch>-eq (filter-chain) → ... → physical output
 
-The 8-channel negotiation (FL FR FC LFE RL RR SL SR) happens automatically when
-PipeWire links the loopback playback port to an 8-channel EQ node; we only need to
-tell PipeWire *not* to remix (``stream.dont-remix=false`` allows it, because the
-default would prevent PipeWire from expanding 2ch to 8ch).
+In Sonar mode the Game/Media/Aux captures advertise 8ch 7.1
+(``audio.channels=8 audio.position=[FL FR FC LFE RL RR SL SR]``) so a game
+outputting real multichannel hands all eight channels through to the 8ch EQ →
+HeSuVi chain instead of being collapsed to stereo at the sink — previously a
+2ch capture made HRIR/Spatial Audio receive only ``FL FR`` (the extra HeSuVi
+channels stayed silent), and the EQ/HeSuVi confs were already 8ch.  Chat stays
+2ch ``[FL FR]`` and feeds the mono chat PCM path.  In simple mode (targets are
+physical Stereo/Mono ALSA outputs) everything stays 2ch ``[FL FR]`` as before.
+``stream.dont-remix=false`` on the playback side still lets PipeWire expand
+2→8ch — e.g. a stereo source routed to an 8ch channel — when a link requires it.
 
 This module is intentionally pure: no device_state access, no file I/O, no import-
 time side effects.  Callers (e.g. core.py) are responsible for resolving targets and
@@ -183,6 +189,14 @@ class LoopbackSpec:
     playback_name: str
     target: str
     description: str
+    # Channel format negotiated on the capture (sink) side and forwarded on the
+    # playback (stream) side. Game/Media/Aux use 8ch 7.1 in Sonar mode so a
+    # multichannel source (a game outputting real 7.1) can hand its channels
+    # through to the 8ch EQ → HeSuVi chain intact; Chat stays 2ch [FL FR].
+    capture_channels: int = 2
+    capture_position: str = "FL FR"
+    playback_channels: int = 2
+    playback_position: str = "FL FR"
 
 
 # ── Pre-defined sink table (mirrors _VIRTUAL_SINKS in sonar_to_pipewire.py) ──
@@ -232,8 +246,12 @@ OPTIONAL_CHANNELS = ("aux",)
 def _build_pw_loopback_argv(spec: LoopbackSpec) -> list[str]:
     """Build the ``pw-loopback`` argv for *spec*.
 
-    The capture side is always 2ch [FL FR] with ``media.class=Audio/Sink``
-    so that applications can route audio to it.  The playback side carries
+    The capture side is the Audio/Sink applications see and route to — its
+    channel count decides what a game sends. Game/Media/Aux use 8ch 7.1 in
+    Sonar mode (see ``LoopbackSpec.capture_channels``) so games with native
+    7.1 output deliver all eight channels into the 8ch EQ → HeSuVi chain
+    instead of being collapsed to stereo at the sink; Chat stays 2ch and
+    feeds the mono chat PCM path. The playback side carries the same format,
     ``target.object`` (WirePlumber >= 0.5) plus ``node.target`` (0.4.x compat),
     ``stream.dont-remix=false`` (which lets PipeWire expand
     2→8ch when linking to an 8ch EQ node), and the standard linger/fallback
@@ -242,14 +260,16 @@ def _build_pw_loopback_argv(spec: LoopbackSpec) -> list[str]:
     The props string format is the ``key=value`` space-separated form accepted
     by ``pw-loopback --capture-props`` / ``--playback-props``.
 
-    Example for the Media channel::
+    Example for the Media channel (Sonar mode, 8ch)::
 
         pw-loopback
           --capture-props='node.name=Arctis_Media media.class=Audio/Sink
-                           audio.channels=2 audio.position=[FL FR]'
+                           audio.channels=8
+                           audio.position=[FL FR FC LFE RL RR SL SR]'
           --playback-props='node.name=Arctis_Media_sink_out
                             node.description=Media
-                            audio.channels=2 audio.position=[FL FR]
+                            audio.channels=8
+                            audio.position=[FL FR FC LFE RL RR SL SR]
                             stream.dont-remix=false
                             target.object=effect_input.sonar-media-eq
                             node.target=effect_input.sonar-media-eq
@@ -273,14 +293,14 @@ def _build_pw_loopback_argv(spec: LoopbackSpec) -> list[str]:
         f"node.name={spec.capture_name}"
         f' node.description="{spec.description}"'
         f" media.class=Audio/Sink"
-        f" audio.channels=2"
-        f" audio.position=[FL FR]"
+        f" audio.channels={spec.capture_channels}"
+        f" audio.position=[{spec.capture_position}]"
     )
     playback_props = (
         f"node.name={spec.playback_name}"
         f' node.description="{spec.description}"'
-        f" audio.channels=2"
-        f" audio.position=[FL FR]"
+        f" audio.channels={spec.playback_channels}"
+        f" audio.position=[{spec.playback_position}]"
         f" stream.dont-remix=false"
         # WirePlumber >= 0.5 resolves target.object (object.serial / node.name
         # lookup) with priority over node.target; without it the stream can be
@@ -931,11 +951,29 @@ def make_specs(
             target = physical_chat
         else:
             target = physical_game
+
+        # 8ch 7.1 capture/playback is a Sonar-mode feature: in Sonar mode a
+        # multichannel source must reach the 8ch EQ → HeSuVi chain intact, so
+        # game/media/aux advertise 8ch and pass all eight channels through
+        # (fixes HRIR/Spatial Audio receiving only stereo while the EQ/HeSuVi
+        # were already 8ch). In simple mode targets are physical Stereo/Mono
+        # ALSA outputs, so channels stay 2ch — the historical behaviour.
+        if sonar and sink["channel"] != "chat":
+            capture_pos = "FL FR FC LFE RL RR SL SR"
+            channels = 8
+        else:
+            capture_pos = "FL FR"
+            channels = 2
+
         specs.append(LoopbackSpec(
             channel=sink["channel"],
             capture_name=sink["capture_name"],
             playback_name=sink["playback_name"],
             target=target,
             description=f"{device_name} {sink['description']}",
+            capture_channels=channels,
+            capture_position=capture_pos,
+            playback_channels=channels,
+            playback_position=capture_pos,
         ))
     return specs
