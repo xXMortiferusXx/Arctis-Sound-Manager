@@ -185,6 +185,19 @@ class TestBuildArgv:
         argv = _build_pw_loopback_argv(media_spec)
         assert "audio.position=[FL FR FC LFE RL RR SL SR]" in argv[1]
 
+    def test_capture_channelmix_disabled_8ch(self, media_spec: LoopbackSpec) -> None:
+        """8ch captures must set channelmix.disable so a stereo source is not
+        upmixed into correlated copies of FL/FR on the 7.1-extra channels —
+        the EQ → HeSuVi convolution would sum them back onto the LR mix and
+        make stereo content sound much louder than real multichannel audio."""
+        argv = _build_pw_loopback_argv(media_spec)
+        assert "channelmix.disable=true" in argv[1]
+
+    def test_capture_channelmix_enabled_2ch(self, chat_spec: LoopbackSpec) -> None:
+        """2ch captures (Chat) get no channelmix.disable override."""
+        argv = _build_pw_loopback_argv(chat_spec)
+        assert "channelmix.disable=true" not in argv[1]
+
     def test_playback_channels_8(self, media_spec: LoopbackSpec) -> None:
         argv = _build_pw_loopback_argv(media_spec)
         assert "audio.channels=8" in argv[2]

@@ -251,7 +251,11 @@ def _build_pw_loopback_argv(spec: LoopbackSpec) -> list[str]:
     Sonar mode (see ``LoopbackSpec.capture_channels``) so games with native
     7.1 output deliver all eight channels into the 8ch EQ → HeSuVi chain
     instead of being collapsed to stereo at the sink; Chat stays 2ch and
-    feeds the mono chat PCM path. The playback side carries the same format,
+    feeds the mono chat PCM path. The 8ch captures also set
+    ``channelmix.disable=true`` so a stereo source is never upmixed into the
+    7.1-extra channels (the convolution would re-sum it back onto the LR mix
+    and inflate its volume); genuine 7.1 sources are unaffected. The playback
+    side carries the same format,
     ``target.object`` (WirePlumber >= 0.5) plus ``node.target`` (0.4.x compat),
     ``stream.dont-remix=false`` (which lets PipeWire expand
     2→8ch when linking to an 8ch EQ node), and the standard linger/fallback
@@ -265,7 +269,8 @@ def _build_pw_loopback_argv(spec: LoopbackSpec) -> list[str]:
         pw-loopback
           --capture-props='node.name=Arctis_Media media.class=Audio/Sink
                            audio.channels=8
-                           audio.position=[FL FR FC LFE RL RR SL SR]'
+                           audio.position=[FL FR FC LFE RL RR SL SR]
+                           channelmix.disable=true'
           --playback-props='node.name=Arctis_Media_sink_out
                             node.description=Media
                             audio.channels=8
@@ -295,6 +300,15 @@ def _build_pw_loopback_argv(spec: LoopbackSpec) -> list[str]:
         f" media.class=Audio/Sink"
         f" audio.channels={spec.capture_channels}"
         f" audio.position=[{spec.capture_position}]"
+        # 8ch sinks must NOT upmix a stereo source into the extra 7.1 channels:
+        # channelmix would synthesize correlated copies of FL/FR into
+        # FC/LFE/RL/RR/SL/SR, which the EQ → HeSuVi convolution then sums back
+        # onto the LR mix — boosting the perceived volume of stereo content
+        # (e.g. browser music) far above real multichannel game audio. With
+        # channelmix.disable, stereo stays in FL/FR and the 7.1-extra channels
+        # stay silent; genuine 7.1 sources (all eight channels genuinely
+        # populated) are unaffected.
+        + (f" channelmix.disable=true" if spec.capture_channels > 2 else "")
     )
     playback_props = (
         f"node.name={spec.playback_name}"
