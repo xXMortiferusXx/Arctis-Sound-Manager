@@ -458,13 +458,13 @@ class _ApplyWorker(QThread):
         log = logging.getLogger(__name__)
         try:
             try:
-                boost_state = _load_boost()
+                boost_state = _load_boost(self._channel)
                 boost_db = boost_state.get("db", 0.0) if boost_state.get("enabled") else 0.0
             except Exception as e:
                 log.warning("boost load failed: %s — using default", e)
                 boost_db = 0.0
             try:
-                smart_state = _load_smart_volume()
+                smart_state = _load_smart_volume(self._channel)
             except Exception as e:
                 log.warning("smart_volume load failed: %s — using default", e)
                 smart_state = {"enabled": False, "level": 0.0, "loudness": "balanced"}
@@ -789,17 +789,6 @@ class _ApplyAllWorker(QThread):
         import logging
         log = logging.getLogger(__name__)
         try:
-            try:
-                boost_state = _load_boost()
-                boost_db = boost_state.get("db", 0.0) if boost_state.get("enabled") else 0.0
-            except Exception as e:
-                log.warning("boost load failed: %s — using default", e)
-                boost_db = 0.0
-            try:
-                smart_state = _load_smart_volume()
-            except Exception as e:
-                log.warning("smart_volume load failed: %s — using default", e)
-                smart_state = {"enabled": False, "level": 0.0, "loudness": "balanced"}
             game_spatial = _load_spatial_audio("game")
             media_spatial = _load_spatial_audio("media")
 
@@ -814,6 +803,17 @@ class _ApplyAllWorker(QThread):
                     generate_sonar_eq_conf("output", [], 0.0, 0.0, 0.0,
                                            boost_db=0.0, smart_volume=None)
                     continue
+                try:
+                    boost_state = _load_boost(channel)
+                    boost_db = boost_state.get("db", 0.0) if boost_state.get("enabled") else 0.0
+                except Exception as e:
+                    log.warning("boost load failed: %s — using default", e)
+                    boost_db = 0.0
+                try:
+                    smart_state = _load_smart_volume(channel)
+                except Exception as e:
+                    log.warning("smart_volume load failed: %s — using default", e)
+                    smart_state = {"enabled": False, "level": 0.0, "loudness": "balanced"}
                 try:
                     bands = _parse_preset(
                         _list_presets(channel).get(_active_preset_name(channel),
@@ -848,7 +848,7 @@ class _ApplyAllWorker(QThread):
                 micro_macro.get("basses", 0.0),
                 micro_macro.get("voix", 0.0),
                 micro_macro.get("aigus", 0.0),
-                boost_db=boost_db,
+                boost_db=0.0,
                 noise_canceling=micro_proc.get("noiseCanceling"),
                 noise_reduction=micro_proc,
             )
@@ -1714,7 +1714,7 @@ class SonarChannelWidget(QWidget):
                 sep.setVisible(_has_spatial)
                 scl.addWidget(sep)
 
-            self._boost = BoostVolumeWidget()
+            self._boost = BoostVolumeWidget(channel=channel)
             scl.addWidget(self._boost)
 
             sep2 = QFrame()
@@ -1722,7 +1722,7 @@ class SonarChannelWidget(QWidget):
             sep2.setStyleSheet(f"background: {BORDER}; border: none; max-height: 1px;")
             scl.addWidget(sep2)
 
-            self._smart = SmartVolumeWidget()
+            self._smart = SmartVolumeWidget(channel=channel)
             scl.addWidget(self._smart)
 
             if channel in ("chat", "media", "output"):
@@ -2004,8 +2004,12 @@ _SMART_FILE  = _CFG / "sonar_smart_volume.json"
 # channel count. Kept per-channel-independent so only the Output tab uses it.
 _OUTPUT_PASSTHROUGH_FILE = _CFG / "sonar_output_passthrough.json"
 
-_BOOST_DEFAULTS: dict  = {"enabled": False, "db": 0.0}
-_SMART_DEFAULTS: dict  = {"enabled": False, "level": 0.0, "loudness": "balanced"}
+# Boost/Smart Volume are per-channel: the JSON file holds a dict keyed by
+# channel (Option A). Channels that expose the widgets in the GUI:
+_BOOST_CHANNELS = ("game", "chat", "media", "aux")
+
+_BOOST_DEFAULTS: dict  = {"enabled": False, "db": 3.0}
+_SMART_DEFAULTS: dict  = {"enabled": False, "level": 50.0, "loudness": "balanced"}
 
 
 def _load_output_passthrough() -> bool:
@@ -2022,32 +2026,68 @@ def _save_output_passthrough(enabled: bool) -> None:
     _OUTPUT_PASSTHROUGH_FILE.write_text(json.dumps({"enabled": bool(enabled)}))
 
 
-def _load_boost() -> dict:
+def _load_boost(channel: str | None = None) -> dict:
+    """Load the per-channel Boost state for *channel*.
+
+    ``channel=None`` returns the whole per-channel dict (used only to migrate
+    or to read everything at once); a channel returns that channel's state
+    merged over the defaults. A legacy flat file (pre-per-channel) is migrated
+    in place: its value is treated as the state for every boost channel.
+    """
+    data = _read_boost_map()
+    if channel is None:
+        return data
+    return {**_BOOST_DEFAULTS, **data.get(channel, {})}
+
+
+def _read_boost_map() -> dict:
     if _BOOST_FILE.exists():
         try:
-            return {**_BOOST_DEFAULTS, **json.loads(_BOOST_FILE.read_text())}
+            raw = json.loads(_BOOST_FILE.read_text())
         except Exception:
-            pass
-    return dict(_BOOST_DEFAULTS)
+            raw = {}
+        # Legacy flat form {"enabled": …, "db": …} → per-channel dict.
+        if isinstance(raw, dict) and "db" in raw and "enabled" in raw:
+            return {ch: dict(raw) for ch in _BOOST_CHANNELS}
+        if isinstance(raw, dict):
+            return raw
+    return {}
 
 
-def _save_boost(state: dict) -> None:
+def _save_boost(channel: str, state: dict) -> None:
+    data = _read_boost_map()
+    data[channel] = {**_BOOST_DEFAULTS, **state}
     _CFG.mkdir(parents=True, exist_ok=True)
-    _BOOST_FILE.write_text(json.dumps(state, indent=2))
+    _BOOST_FILE.write_text(json.dumps(data, indent=2))
 
 
-def _load_smart_volume() -> dict:
+def _load_smart_volume(channel: str | None = None) -> dict:
+    """Load the per-channel Smart Volume state for *channel* (see _load_boost)."""
+    data = _read_smart_map()
+    if channel is None:
+        return data
+    return {**_SMART_DEFAULTS, **data.get(channel, {})}
+
+
+def _read_smart_map() -> dict:
     if _SMART_FILE.exists():
         try:
-            return {**_SMART_DEFAULTS, **json.loads(_SMART_FILE.read_text())}
+            raw = json.loads(_SMART_FILE.read_text())
         except Exception:
-            pass
-    return dict(_SMART_DEFAULTS)
+            raw = {}
+        # Legacy flat form {"enabled": …, "level": …, "loudness": …}.
+        if isinstance(raw, dict) and "level" in raw and "enabled" in raw:
+            return {ch: dict(raw) for ch in _BOOST_CHANNELS}
+        if isinstance(raw, dict):
+            return raw
+    return {}
 
 
-def _save_smart_volume(state: dict) -> None:
+def _save_smart_volume(channel: str, state: dict) -> None:
+    data = _read_smart_map()
+    data[channel] = {**_SMART_DEFAULTS, **state}
     _CFG.mkdir(parents=True, exist_ok=True)
-    _SMART_FILE.write_text(json.dumps(state, indent=2))
+    _SMART_FILE.write_text(json.dumps(data, indent=2))
 
 
 # ── Spatial Audio widget ─────────────────────────────────────────────────────
@@ -2229,9 +2269,10 @@ class BoostVolumeWidget(QWidget):
     """
     state_changed = Signal()
 
-    def __init__(self, parent: QWidget | None = None):
+    def __init__(self, channel: str = "game", parent: QWidget | None = None):
         super().__init__(parent)
-        self._state = _load_boost()
+        self._channel = channel
+        self._state = _load_boost(channel)
 
         self.setStyleSheet(f"""
             QLabel {{ background: transparent; border: none; }}
@@ -2316,14 +2357,14 @@ class BoostVolumeWidget(QWidget):
 
     def _on_toggle(self, checked):
         self._state["enabled"] = checked == Qt.CheckState.Checked
-        _save_boost(self._state)
+        _save_boost(self._channel, self._state)
         self._detail.setVisible(self._state["enabled"])
         self.state_changed.emit()
 
     def _on_slider(self, value: int):
         db = value / 10.0
         self._state["db"] = db
-        _save_boost(self._state)
+        _save_boost(self._channel, self._state)
         self._db_label.setText(self._fmt(db))
         self.state_changed.emit()
 
@@ -2334,7 +2375,7 @@ class BoostVolumeWidget(QWidget):
         if not state:
             return
         self._state.update(state)
-        _save_boost(self._state)
+        _save_boost(self._channel, self._state)
         self._toggle.blockSignals(True)
         self._toggle.setChecked(self._state.get("enabled", False))
         self._toggle.blockSignals(False)
@@ -2357,9 +2398,10 @@ class SmartVolumeWidget(QWidget):
 
     _LOUDNESS_KEYS = ["quiet", "balanced", "loud"]
 
-    def __init__(self, parent: QWidget | None = None):
+    def __init__(self, channel: str = "game", parent: QWidget | None = None):
         super().__init__(parent)
-        self._state = _load_smart_volume()
+        self._channel = channel
+        self._state = _load_smart_volume(channel)
 
         self.setStyleSheet(f"""
             QLabel {{ background: transparent; border: none; }}
@@ -2469,19 +2511,19 @@ class SmartVolumeWidget(QWidget):
 
     def _on_toggle(self, checked):
         self._state["enabled"] = checked == Qt.CheckState.Checked
-        _save_smart_volume(self._state)
+        _save_smart_volume(self._channel, self._state)
         self._detail.setVisible(self._state["enabled"])
         self.state_changed.emit()
 
     def _on_loudness(self, value: str):
         self._state["loudness"] = value
-        _save_smart_volume(self._state)
+        _save_smart_volume(self._channel, self._state)
         self._refresh_loudness()
         self.state_changed.emit()
 
     def _on_level(self, value: int):
         self._state["level"] = float(value)
-        _save_smart_volume(self._state)
+        _save_smart_volume(self._channel, self._state)
         self._level_val.setText(str(value))
         self.state_changed.emit()
 
@@ -2492,7 +2534,7 @@ class SmartVolumeWidget(QWidget):
         if not state:
             return
         self._state.update(state)
-        _save_smart_volume(self._state)
+        _save_smart_volume(self._channel, self._state)
         self._toggle.blockSignals(True)
         self._toggle.setChecked(self._state.get("enabled", False))
         self._toggle.blockSignals(False)
@@ -3394,6 +3436,8 @@ class SonarPage(QWidget):
         self._media_widget._smart.state_changed.connect(self._on_smart_changed)
         self._chat_widget._boost.state_changed.connect(self._on_boost_changed)
         self._chat_widget._smart.state_changed.connect(self._on_smart_changed)
+        self._aux_widget._boost.state_changed.connect(self._on_boost_changed)
+        self._aux_widget._smart.state_changed.connect(self._on_smart_changed)
 
         # Apply the currently-active theme so a saved non-default theme renders
         # correctly on first paint.

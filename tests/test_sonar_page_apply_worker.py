@@ -30,10 +30,10 @@ def _prepare_conf_dir(monkeypatch, tmp_path):
 def _stub_settings(monkeypatch):
     """Boost/Smart Volume disabled — keeps the generated conf deterministic
     and independent of any real ~/.config/arctis_manager state."""
-    monkeypatch.setattr(sp, "_load_boost", lambda: {"enabled": False, "db": 0.0})
+    monkeypatch.setattr(sp, "_load_boost", lambda channel=None: {"enabled": False, "db": 0.0})
     monkeypatch.setattr(
         sp, "_load_smart_volume",
-        lambda: {"enabled": False, "level": 0.0, "loudness": "balanced"},
+        lambda channel=None: {"enabled": False, "level": 0.0, "loudness": "balanced"},
     )
     # CHA-7: generate_sonar_eq_conf() snapshots the EQ state it just wrote a
     # conf for, under the suite's session-wide fake $HOME (see conftest.py).
