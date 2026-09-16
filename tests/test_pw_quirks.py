@@ -44,6 +44,19 @@ def test_render_no_suspend_conf_keeps_period_size_drops_suspend_override():
     assert "suspend-timeout-seconds = 0" not in text
 
 
+def test_render_no_stream_restore_conf_targets_hesuvi_nodes():
+    """The stream-restore opt-out must match exactly the HeSuVi effect nodes
+    (input + output, Game and Media) with the quoted string "false" — WP only
+    honors the string form (state-stream.lua compares `~= "false"`)."""
+    text = pw_quirks._render_no_stream_restore_conf()
+    assert "stream.rules" in text
+    assert 'node.name = "~effect_input.virtual-surround-7.1-hesuvi*"' in text
+    assert 'node.name = "~effect_output.virtual-surround-7.1-hesuvi*"' in text
+    assert 'state.restore-props = "false"' in text
+    # Never a bare boolean: `false ~= "false"` in Lua would silently re-enable restore.
+    assert "state.restore-props = false" not in text
+
+
 # ── Write path ───────────────────────────────────────────────────────────────
 
 
@@ -151,3 +164,46 @@ def test_wireplumber_version_parses_dotted_output():
 def test_wireplumber_version_returns_none_when_binary_missing():
     with patch("subprocess.run", side_effect=FileNotFoundError()):
         assert pw_quirks._wireplumber_version() is None
+
+
+# ── No-stream-restore quirk (HeSuVi effect nodes) ────────────────────────────
+
+
+def test_apply_no_stream_restore_writes_fragment_when_wp_supported():
+    conf_path = pw_quirks._WP_CONF_DIR / pw_quirks._STREAM_RESTORE_CONF_NAME
+
+    with patch("arctis_sound_manager.pw_quirks._wireplumber_version", return_value=(0, 5)), \
+         patch("arctis_sound_manager.service_control.restart", return_value=True) as mock_restart:
+        result = pw_quirks.apply_no_stream_restore_quirk()
+
+    assert result is True
+    assert conf_path.exists()
+    assert 'state.restore-props = "false"' in conf_path.read_text()
+    mock_restart.assert_called_once_with("wireplumber", timeout=15)
+
+
+def test_apply_no_stream_restore_is_no_op_when_unchanged():
+    conf_path = pw_quirks._WP_CONF_DIR / pw_quirks._STREAM_RESTORE_CONF_NAME
+    conf_path.parent.mkdir(parents=True, exist_ok=True)
+    conf_path.write_text(pw_quirks._render_no_stream_restore_conf())
+    mtime_before = conf_path.stat().st_mtime_ns
+
+    with patch("arctis_sound_manager.pw_quirks._wireplumber_version", return_value=(0, 5)), \
+         patch("arctis_sound_manager.service_control.restart", return_value=True) as mock_restart:
+        result = pw_quirks.apply_no_stream_restore_quirk()
+
+    assert result is False
+    mock_restart.assert_not_called()
+    assert conf_path.stat().st_mtime_ns == mtime_before
+
+
+def test_apply_no_stream_restore_skips_below_wp_0_5():
+    conf_path = pw_quirks._WP_CONF_DIR / pw_quirks._STREAM_RESTORE_CONF_NAME
+
+    with patch("arctis_sound_manager.pw_quirks._wireplumber_version", return_value=(0, 4)), \
+         patch("arctis_sound_manager.service_control.restart", return_value=True) as mock_restart:
+        result = pw_quirks.apply_no_stream_restore_quirk()
+
+    assert result is False
+    assert not conf_path.exists()
+    mock_restart.assert_not_called()

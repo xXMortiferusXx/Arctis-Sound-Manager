@@ -2386,6 +2386,16 @@ class CoreEngine:
             except Exception as e:
                 self.logger.warning(f"Failed to apply WirePlumber no-suspend quirk: {e!r}")
 
+            # Stream-restore quirk for the HeSuVi virtual-surround effect
+            # nodes: stop WirePlumber from remembering/restoring their volume,
+            # so a one-off level change can never silently persist again.
+            # See pw_quirks.apply_no_stream_restore_quirk.
+            try:
+                from arctis_sound_manager.pw_quirks import apply_no_stream_restore_quirk
+                apply_no_stream_restore_quirk()
+            except Exception as e:
+                self.logger.warning(f"Failed to apply WirePlumber no-stream-restore quirk: {e!r}")
+
             # Load defaults
             for _, section in self.device_config.settings.items():
                 for setting in section:
