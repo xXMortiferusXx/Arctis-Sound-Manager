@@ -252,7 +252,7 @@ def _build_pw_loopback_argv(spec: LoopbackSpec) -> list[str]:
     7.1 output deliver all eight channels into the 8ch EQ → HeSuVi chain
     instead of being collapsed to stereo at the sink; Chat stays 2ch and
     feeds the mono chat PCM path. The 8ch captures also set
-    ``channelmix.disable=true`` so a stereo source is never upmixed into the
+    ``channelmix.upmix=false`` so a stereo source is never upmixed into the
     7.1-extra channels (the convolution would re-sum it back onto the LR mix
     and inflate its volume); genuine 7.1 sources are unaffected. The playback
     side carries the same format,
@@ -270,7 +270,7 @@ def _build_pw_loopback_argv(spec: LoopbackSpec) -> list[str]:
           --capture-props='node.name=Arctis_Media media.class=Audio/Sink
                            audio.channels=8
                            audio.position=[FL FR FC LFE RL RR SL SR]
-                           channelmix.disable=true'
+                           channelmix.upmix=false'
           --playback-props='node.name=Arctis_Media_sink_out
                             node.description=Media
                             audio.channels=8
@@ -305,10 +305,13 @@ def _build_pw_loopback_argv(spec: LoopbackSpec) -> list[str]:
         # FC/LFE/RL/RR/SL/SR, which the EQ → HeSuVi convolution then sums back
         # onto the LR mix — boosting the perceived volume of stereo content
         # (e.g. browser music) far above real multichannel game audio. With
-        # channelmix.disable, stereo stays in FL/FR and the 7.1-extra channels
-        # stay silent; genuine 7.1 sources (all eight channels genuinely
-        # populated) are unaffected.
-        + (f" channelmix.disable=true" if spec.capture_channels > 2 else "")
+        # channelmix.upmix=false stereo stays in FL/FR and the 7.1-extra
+        # channels stay silent; genuine 7.1 sources (all eight channels
+        # genuinely populated) are unaffected. channelmix.disable must NOT be
+        # used here — it turns off the whole mixer, which also kills the
+        # 2↔8ch adaptation and the node's own volume handling (the sink then
+        # goes dead-silent and its volume can no longer be raised).
+        + (f" channelmix.upmix=false" if spec.capture_channels > 2 else "")
     )
     playback_props = (
         f"node.name={spec.playback_name}"
