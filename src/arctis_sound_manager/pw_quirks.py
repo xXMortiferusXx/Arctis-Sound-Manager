@@ -228,11 +228,24 @@ def _render_no_stream_restore_conf() -> str:
         "# Media chains permanently unequal (-10.7 dB on Game was traced to\n"
         "# exactly this). Disable stream restore for those nodes so ASM stays\n"
         "# the single source of truth for their level.\n"
+        "#\n"
+        "# Same reasoning covers the ASM virtual sinks (Arctis_Game/Chat/Media):\n"
+        "# their volume is owned by channel_volumes.json (restored by ASM on\n"
+        "# every loopback recreate), and a stale WP snapshot overwrites the user's\n"
+        "# saved level with whatever the sink last happened to be at — observed as\n"
+        "# the game channel drifting back up after every reconnect while the user\n"
+        "# had turned it down. WP must not win that race.\n"
         "stream.rules = [\n"
         "  {\n"
         "    matches = [\n"
         "      { node.name = \"~effect_input.virtual-surround-7.1-hesuvi*\" }\n"
         "      { node.name = \"~effect_output.virtual-surround-7.1-hesuvi*\" }\n"
+        "      { node.name = \"~Arctis_Game\" }\n"
+        "      { node.name = \"~Arctis_Chat\" }\n"
+        "      { node.name = \"~Arctis_Media\" }\n"
+        "      { node.name = \"~Arctis_Game_sink_out\" }\n"
+        "      { node.name = \"~Arctis_Chat_sink_out\" }\n"
+        "      { node.name = \"~Arctis_Media_sink_out\" }\n"
         "    ]\n"
         "    actions = {\n"
         "      update-props = { state.restore-props = \"false\" }\n"
@@ -244,15 +257,18 @@ def _render_no_stream_restore_conf() -> str:
 
 def apply_no_stream_restore_quirk() -> bool:
     """Write the WirePlumber fragment disabling volume stream-restore for
-    ASM's HeSuVi virtual-surround effect nodes (see
-    :func:`_render_no_stream_restore_conf`).
+    ASM's HeSuVi virtual-surround effect nodes **and** the Arctis virtual
+    sinks (see :func:`_render_no_stream_restore_conf`).
 
     Without it WirePlumber remembers whatever volume those nodes last had and
     re-applies it after every (re)connect — so a stray -10.7 dB that once
     landed on the Game chain silently persisted forever, making Game/Media
-    unequal. Unlike the shared physical ALSA sink (which keeps its normal
-    restore so pavucontrol/ASM volumes behave), these internal effect nodes
-    must always come up at 1.0.
+    unequal, and a stale snapshot of the Game sink volume overrode the user's
+    saved channel_volumes.json level after every loopback recreate. Unlike the
+    shared physical ALSA sink (which keeps its normal restore so
+    pavucontrol/ASM volumes behave), these internal effect nodes and virtual
+    sinks must always come up at the level ASM controls (1.0 / the saved
+    per-channel value).
 
     Not gated by a per-device YAML flag: wanted whenever ASM manages a device.
     Idempotent — a no-op when the fragment on disk already matches.
@@ -282,7 +298,7 @@ def apply_no_stream_restore_quirk() -> bool:
         _log.warning("pw_quirks: could not write %s: %s", conf_path, exc)
         return False
 
-    _log.info("pw_quirks: applied no-stream-restore quirk for the HeSuVi effect nodes.")
+    _log.info("pw_quirks: applied no-stream-restore quirk for the HeSuVi effect nodes and Arctis virtual sinks.")
     _restart_wireplumber()
     return True
 
