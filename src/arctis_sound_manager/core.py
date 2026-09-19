@@ -721,6 +721,10 @@ class CoreEngine:
             for spec in recreated:
                 self.loopback_manager.recreate(spec)  # keep Arctis_Chat alive — Discord-safe
             self._link_loopbacks(recreated)
+            # The fresh pw-loopback sinks come up at 100%; queue a restore of
+            # each channel's persisted level for the next watchdog tick, as
+            # setup_loopbacks() does (issue #134).
+            self._queue_volume_restore(s.channel for s in recreated)
 
             self.logger.info(
                 "recreate_loopbacks_game_media: game+media recreated, chat preserved"
@@ -775,6 +779,10 @@ class CoreEngine:
                 if spec.channel == channel:
                     self.loopback_manager.recreate(spec)
                     self._link_loopbacks([spec])
+                    # The fresh pw-loopback sink comes up at 100%; queue a
+                    # restore of the channel's persisted level for the next
+                    # watchdog tick, as setup_loopbacks() does (issue #134).
+                    self._queue_volume_restore((channel,))
                     self.logger.info(
                         "recreate_loopback_single: channel=%r recreated", channel,
                     )

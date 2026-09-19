@@ -180,3 +180,67 @@ def test_queue_marks_all_channels_with_full_budget():
 
     ticks = engine._VOLUME_RESTORE_TICKS
     assert engine._volume_restore_pending == {"game": ticks, "chat": ticks, "media": ticks}
+
+
+# ── Recreate triggers (GUI EQ/boost-apply paths) ────────────────────────────
+
+def _make_recreate_engine(monkeypatch, spec_list):
+    """Build a bare CoreEngine for recreate_loopbacks_game_media / _single.
+
+    *spec_list* is the iterable make_specs() is stubbed to return (the real
+    one returns a list of LoopbackSpec), so the recreate paths see exactly the
+    channels we want (game/media/chat, minus any the method filters out).
+    """
+    import arctis_sound_manager.core as core_mod
+
+    engine = core_mod.CoreEngine.__new__(core_mod.CoreEngine)
+    engine.logger = logging.getLogger("test")
+    engine._last_recreate_loopbacks = 0.0
+    engine._volume_restore_pending = {}
+
+    engine.loopback_manager = MagicMock()
+    engine._link_loopbacks = MagicMock()
+    engine._read_eq_mode_is_sonar = MagicMock(return_value=True)
+
+    monkeypatch.setattr(core_mod.device_state, "is_device_set", lambda: True)
+    monkeypatch.setattr(core_mod.device_state, "get_physical_out_game", lambda: "hw:GAME")
+    monkeypatch.setattr(core_mod.device_state, "get_physical_out_chat", lambda: "hw:CHAT")
+    monkeypatch.setattr(core_mod.device_state, "get_channel_label", lambda: "test")
+    monkeypatch.setattr(core_mod, "make_specs", lambda **kw: spec_list)
+    return engine
+
+
+def test_recreate_game_media_queues_volume_restore(monkeypatch):
+    spec_list = [
+        _spec("game", "Arctis_Game"),
+        _spec("media", "Arctis_Media"),
+        _spec("chat", "Arctis_Chat"),
+    ]
+    engine = _make_recreate_engine(monkeypatch, spec_list)
+
+    engine.recreate_loopbacks_game_media()
+
+    recreated_channels = [
+        c.args[0].channel for c in engine.loopback_manager.recreate.call_args_list
+    ]
+    assert recreated_channels == ["game", "media"]   # chat preserved (Discord-safe)
+    ticks = engine._VOLUME_RESTORE_TICKS
+    assert engine._volume_restore_pending == {"game": ticks, "media": ticks}
+    engine._link_loopbacks.assert_called_once()
+
+
+def test_recreate_single_queues_volume_restore(monkeypatch):
+    spec_list = [
+        _spec("game", "Arctis_Game"),
+        _spec("media", "Arctis_Media"),
+        _spec("chat", "Arctis_Chat"),
+    ]
+    engine = _make_recreate_engine(monkeypatch, spec_list)
+
+    engine.recreate_loopback_single("game")
+
+    assert engine.loopback_manager.recreate.call_count == 1
+    assert engine.loopback_manager.recreate.call_args.args[0] is spec_list[0]
+    ticks = engine._VOLUME_RESTORE_TICKS
+    assert engine._volume_restore_pending == {"game": ticks}
+    engine._link_loopbacks.assert_called_once()
