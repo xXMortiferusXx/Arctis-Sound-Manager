@@ -3951,8 +3951,29 @@ def ensure_physical_output_links(
     skip_targets = skip_targets or set()
     results: dict[str, bool] = {}
 
+    # The user's own routing can collapse Chat and Output onto the SAME
+    # physical port (external output == the headset's chat sink, the typical
+    # "put the master on the game/chat output" setup). In that case the two
+    # chains both reach stereo-chat: sonar-output-eq delivers the master
+    # mix — the chat is already IN that sum, boosted by the chat EQ stage
+    # feeding the master — and a second, parallel sonar-chat-eq hop then
+    # delivers the same chat AGAIN into the same ports (081: 134→177,
+    # 248→178 + 198→177, 305→178). The boost is diluted by the flat double.
+    # The master must keep owning the port; the parallel hop is the
+    # duplicate, so it is the one dropped. Seen as one chain at the ear:
+    # chat stays where master volume rules it, at full boost.
     chat_target = channel_destination("chat", data)
-    if chat_target and chat_target not in skip_targets:
+    output_target = _get_configured_external_output()
+    # The cutdown's OWN last hop for the Output channel resolves through the
+    # same physical chat hop the next block also guards, so the chat feed is
+    # NOT touched here — it is handled exclusively in the output block below,
+    # which compares destinations. Keeping the two in one place means the
+    # "drop the duplicate, not the master" rule can never drift apart.
+    if (
+        chat_target
+        and chat_target not in skip_targets
+        and chat_target != output_target
+    ):
         results["chat"] = ensure_loopback_link(_CHAT_OUTPUT_NAME, chat_target, data=data)
 
     # Each channel's HeSuVi stage reaches that channel's OWN device: #169 gave
