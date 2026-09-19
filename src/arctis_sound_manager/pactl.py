@@ -472,6 +472,20 @@ class PulseAudioManager:
                 if extra_sink and not self._sink_is_at(extra_sink, media_mix):
                     self.pulse.volume_set_all_chans(extra_sink, media_mix / 100)
 
+        # Persist the dial position so WP's per-node stream-restore (which is
+        # disabled for the Arctis sinks via the no-stream-restore quirk) cannot
+        # re-apply a stale snapshot, and so the next loopback recreate restores
+        # what the dial actually said — not the value from before the dial was
+        # last touched. The dial is the firmware's way of setting these
+        # channels, so it must write to the same store as the GUI sliders.
+        from arctis_sound_manager.channel_volumes import save_channel_volume
+        save_channel_volume(PULSE_GAME_NODE_NAME, media_mix)
+        save_channel_volume(PULSE_CHAT_NODE_NAME, chat_mix)
+        for channel in extra_channels:
+            node_name = self._EXTRA_MIX_NODE_NAMES.get(channel)
+            if node_name is not None:
+                save_channel_volume(node_name, media_mix)
+
     @staticmethod
     def _sink_is_at(sink, pct: int) -> bool:
         """Whether *sink* already sits at *pct*, as the server would report it.
