@@ -1858,6 +1858,14 @@ def generate_sonar_micro_conf(
     (another connected mic) instead of the Arctis. ``target.object`` is kept
     as a documentary hint only; :func:`ensure_micro_capture_link` is what
     actually (re)establishes and enforces the link.
+
+    The playback side gets the same treatment (``node.autoconnect = false``
+    and ``state.restore-target = false``): the output is an Audio/Source that
+    must only ever be *captured* by applications, never *routed* to an output
+    sink. A stale WirePlumber ``target`` persisted for
+    ``effect_output.sonar-micro-eq`` re-applies on every (re)connect and hands
+    the mic straight to the physical output — audible as the user hearing
+    themselves on one side despite sidetone being off.
     """
     # Only a conf written to the real path represents the live mic EQ;
     # callers passing an explicit output_path are diffing or testing, and
@@ -2134,6 +2142,8 @@ context.modules = [
       playback.props = {{
         node.name             = "effect_output.sonar-micro-eq"
         media.class           = Audio/Source
+        node.autoconnect      = false
+        state.restore-target  = false
         audio.rate            = 48000
         audio.channels        = 1
         audio.position        = [ MONO ]
@@ -2267,6 +2277,8 @@ context.modules = [
       playback.props = {{
         node.name             = "effect_output.sonar-micro-eq"
         media.class           = Audio/Source
+        node.autoconnect      = false
+        state.restore-target  = false
         audio.rate            = 48000
         audio.channels        = 1
         audio.position        = [ MONO ]
