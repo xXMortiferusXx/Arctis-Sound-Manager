@@ -13,13 +13,14 @@ Dokumentation aller Änderungen, die wir an diesem Fork `xXMortiferusXx/Arctis-S
 | `38790d1` | **loopback: use channelmix.upmix=false instead of channelmix.disable on 8ch** |
 | `d67e88e` | **pw_quirks: stop WirePlumber from restoring HeSuVi effect-node volumes** |
 | `57f2b88` | **sonar: per-channel Boost & Smart Volume (Option A)** |
-| `0d24d531` | **chore: bump fork version to 1.4.27+fork.1** (Backport-Cherry-Picks siehe unten) |
+| `0d24d531` | **chore: bump fork version** (anfangs `1.4.27-fork.1`, invalid) |
+| `55a7470d` | **fix: PEP 440 → `1.4.27+fork.1`** (wheel-Build-kompatibel; Backport siehe unten) |
 
 *Fett = die commits, die im finalen Fork live sind.*
 
 ---
 
-## 5. Upstream-1.4.27-Backport (2026-09-21, Branch `backport-1.4.27`)
+## 5. Upstream-1.4.27-Backport (2026-09-21, Branch `backport-1.4.27` → als Fast-Forward in `main` gemerged + gepusht)
 
 ### Kontext
 Upstream (`loteran/Arctis-Sound-Manager`) hat v1.4.27 released (64 Commits über unserer
