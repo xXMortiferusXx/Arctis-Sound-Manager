@@ -13,7 +13,7 @@ Dokumentation aller Änderungen, die wir an diesem Fork `xXMortiferusXx/Arctis-S
 | `38790d1` | **loopback: use channelmix.upmix=false instead of channelmix.disable on 8ch** |
 | `d67e88e` | **pw_quirks: stop WirePlumber from restoring HeSuVi effect-node volumes** |
 | `57f2b88` | **sonar: per-channel Boost & Smart Volume (Option A)** |
-| `0d24d531` | **chore: bump fork version to 1.4.27-fork.1** (Backport-Cherry-Picks siehe unten) |
+| `0d24d531` | **chore: bump fork version to 1.4.27+fork.1** (Backport-Cherry-Picks siehe unten) |
 
 *Fett = die commits, die im finalen Fork live sind.*
 
@@ -49,14 +49,16 @@ Fixes**, keine neuen Features (Clips/window-capture, GUI-Umbau, Arctis-5-Support
 - **GUI-Umbau** `9a0d9d36`/`182b4ec6`/`86a1aa4e`/`31a9ca23` — Konflikt mit unserem `sonar_page.py` (Boost/Smart-Volume-Widgets), nur manueller Backport möglich.
 - **Arctis-5-Support** `8d6c8cb8`, **Bluetooth** `524f5cc8`/`e3770122` (GameDAC = USB), CI/Packaging/Usage-Stats.
 
-### Versionsnummer: `1.4.27-fork.1` (WICHTIG)
+### Versionsnummer: `1.4.27+fork.1` (WICHTIG)
 - Grund: Fork ≠ Original (fehlender Clips-Teil + eigene Patches). `1.4.26` behalten würde
   den Update-Checker dauerhaft auf v1.4.27 nagen lassen.
-- `pyproject.toml` + Metainfo tragen `1.4.27-fork.1`. Nix-Paket liest Version automatisch aus
+- **PEP 440**: Nur `+` (local version) ist gültig — `1.4.27-fork.1` bricht den Wheel-Build
+  ("Invalid metadata format"). Nixos-rebuild von nex ist daran 2026-09-21 gescheitert.
+- `pyproject.toml` + Metainfo tragen `1.4.27+fork.1`. Nix-Paket liest Version automatisch aus
   pyproject (`nix/package.nix`).
-- Nebeneffekt: `update_checker._VER_RE` matcht `^…[a-z]*$` → `-fork.1` nicht parse-bar →
+- Nebeneffekt: `update_checker._VER_RE` matcht `^…[a-z]*$` → `+fork.1` nicht parse-bar →
   Update-Check bricht ab → **kein Nag, keine falsche Wheel-URL vom Upstream**.
-- Beim nächsten Backport: `-fork.2` usw.
+- Beim nächsten Backport: `+fork.2` usw.
 
 ### Tests
 - Voll-Lauf: 2920 passed, 5 failed, 35 skipped. Die 5 Failures sind **vorbestehend** auf

@@ -56,7 +56,7 @@
   <content_rating type="oars-1.1" />
 
   <releases>
-    <release version="1.4.27-fork.1" date="2026-09-21">
+    <release version="1.4.27+fork.1" date="2026-09-21">
       <description>
         <p>Fork build (xXMortiferusXx). Backports the functional fixes of upstream v1.4.27: GameDAC master volume wheel now syncs to the default PipeWire sink and displays the correct direction, Sonar EQ gets headroom against clipping, router never treats ASM's own filter-chain nodes as applications (1.4.26 regression), stream-guard/router share one fixed singleton, output devices are silenced while the chain is rebuilt, and the tray quits without taking PipeWire down. The clip-recording feature of upstream v1.4.27 is not included.</p>
       </description>
