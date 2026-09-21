@@ -13,8 +13,58 @@ Dokumentation aller Änderungen, die wir an diesem Fork `xXMortiferusXx/Arctis-S
 | `38790d1` | **loopback: use channelmix.upmix=false instead of channelmix.disable on 8ch** |
 | `d67e88e` | **pw_quirks: stop WirePlumber from restoring HeSuVi effect-node volumes** |
 | `57f2b88` | **sonar: per-channel Boost & Smart Volume (Option A)** |
+| `0d24d531` | **chore: bump fork version to 1.4.27-fork.1** (Backport-Cherry-Picks siehe unten) |
 
 *Fett = die commits, die im finalen Fork live sind.*
+
+---
+
+## 5. Upstream-1.4.27-Backport (2026-09-21, Branch `backport-1.4.27`)
+
+### Kontext
+Upstream (`loteran/Arctis-Sound-Manager`) hat v1.4.27 released (64 Commits über unserer
+Basis `83c083ed` = v1.4.26). Nicht alles eingespielt — nur die **funktional relevanten
+Fixes**, keine neuen Features (Clips/window-capture, GUI-Umbau, Arctis-5-Support).
+
+### Cherry-gepickte Upstream-Commits (chronologisch)
+| Fork-Hash | Upstream | Beschreibung |
+|-----------|----------|--------------|
+| `4e4b03d0` | `9408bc67` | stream-guard: recycled PID |
+| `8fea6a6a` | `e6e09aa2` | router+guard: gemeinsames Singleton-Fix (`singleton.py`) |
+| `2c2c8f1f` | `a47df5f5` | **GameDAC-Master-Volume-Rad synct auf Default-PipeWire-Sink** |
+| `4a2f47f6` | `ba6f6f70` | **`percentage()` Doppel-Invertierung (GameDAC n. korrekt)** |
+| `0cf973f0` | `3651e602` | core: Idle-Tracker + EIO-Counter |
+| `0c2c554d` | `59683796` | **router: ASM eigene filter-chain-Nodes nicht als Apps (1.4.26-Regression)** |
+| `cd2e5083` | `eda7b144` | GUI-Exit lässt PipeWire in Ruhe |
+| `9665e55f` | `63a7ddbd` | Packaging: Upgrade startet Daemons neu, nie den Tray |
+| `1a3c8f15` | `c2afa90c` | GUI: Same-Version-Rebuild als Upgrade erkennen |
+| `2a0d6765` | `b60eff40` | GUI: sauberer Exit (kein SIGSEGV, kein Geist-Tray) |
+| `6aa4ab1b` | `a5831f39` | GUI: Tray ohne offenes Fenster startet nach Upgrade neu |
+| `08581d49` | `b232deec` | **audio: Output-Devices während Ketten-Rebuild stumm + Tray-Neustart** |
+| `298516a4` | `c34863f8` | **sonar: EQ-Headroom (Senkung um größten Positiv-Gain, Conf v5)** |
+| `66e87c62` | `93d791ed` | test: station_volume-Richtung an `percentage()`-Fix angepasst (PR #255) |
+
+### Bewusst NICHT eingespielt
+- **Clips/window-capture + clip-editor** (~20 Commits) — großes Feature, im Fork nicht genutzt.
+- **GUI-Umbau** `9a0d9d36`/`182b4ec6`/`86a1aa4e`/`31a9ca23` — Konflikt mit unserem `sonar_page.py` (Boost/Smart-Volume-Widgets), nur manueller Backport möglich.
+- **Arctis-5-Support** `8d6c8cb8`, **Bluetooth** `524f5cc8`/`e3770122` (GameDAC = USB), CI/Packaging/Usage-Stats.
+
+### Versionsnummer: `1.4.27-fork.1` (WICHTIG)
+- Grund: Fork ≠ Original (fehlender Clips-Teil + eigene Patches). `1.4.26` behalten würde
+  den Update-Checker dauerhaft auf v1.4.27 nagen lassen.
+- `pyproject.toml` + Metainfo tragen `1.4.27-fork.1`. Nix-Paket liest Version automatisch aus
+  pyproject (`nix/package.nix`).
+- Nebeneffekt: `update_checker._VER_RE` matcht `^…[a-z]*$` → `-fork.1` nicht parse-bar →
+  Update-Check bricht ab → **kein Nag, keine falsche Wheel-URL vom Upstream**.
+- Beim nächsten Backport: `-fork.2` usw.
+
+### Tests
+- Voll-Lauf: 2920 passed, 5 failed, 35 skipped. Die 5 Failures sind **vorbestehend** auf
+  origin/main (Umgebung: live-System-Marker `audio_reconfig`, pillow-Version, `bash`-PATH) —
+  keine Regression durch den Backport.
+- Achtung (Test-Pollution): Kombi-Läufe mit `tests/test_video_router.py` können durch den
+  Live-Marker `/run/user/<uid>/arctis_manager/audio_reconfig` (echte Session) `_confirm_manual_move`-
+  Tests fehlschlagen lassen. Einzeln grün, Voll-Lauf grün.
 
 ---
 
