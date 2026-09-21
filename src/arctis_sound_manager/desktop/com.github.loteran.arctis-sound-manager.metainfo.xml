@@ -56,6 +56,11 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="1.4.27-fork.1" date="2026-09-21">
+      <description>
+        <p>Fork build (xXMortiferusXx). Backports the functional fixes of upstream v1.4.27: GameDAC master volume wheel now syncs to the default PipeWire sink and displays the correct direction, Sonar EQ gets headroom against clipping, router never treats ASM's own filter-chain nodes as applications (1.4.26 regression), stream-guard/router share one fixed singleton, output devices are silenced while the chain is rebuilt, and the tray quits without taking PipeWire down. The clip-recording feature of upstream v1.4.27 is not included.</p>
+      </description>
+    </release>
     <release version="1.4.26" date="2026-09-14">
       <description>
         <p>The daemon froze on wake from suspend (1.4.25 regression, #238). Two. Chat channel routed to an external output device now stays stereo instead of collapsing to mono/left-only, since ASM now owns its link (PipeWire no longer force-negotiates the chat EQ output to the headset's native mono PCM format). (#242). Turning the Aux channel off (or back on) never actually told the daemon.</p>
