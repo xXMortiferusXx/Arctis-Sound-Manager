@@ -15,8 +15,23 @@ Dokumentation aller Änderungen, die wir an diesem Fork `xXMortiferusXx/Arctis-S
 | `57f2b88` | **sonar: per-channel Boost & Smart Volume (Option A)** |
 | `0d24d531` | **chore: bump fork version** (anfangs `1.4.27-fork.1`, invalid) |
 | `55a7470d` | **fix: PEP 440 → `1.4.27+fork.1`** (wheel-Build-kompatibel; Backport siehe unten) |
+| `559059e0` | docs(memory): Übersichtstabelle + Backport-Merge vermerkt |
 
 *Fett = die commits, die im finalen Fork live sind.*
+
+---
+
+## Upstream-Check (2026-09-22)
+
+Ergebnis: **Kein neuer funktionaler Upstream-Patch seit dem 1.4.27-Backport
+(2026-09-21).** Letzter Release bleibt **v1.4.27** (2026-09-20); `main`-HEAD
+(`925c720`) = v1.4.27 + nur `[skip ci]`-Chore/Usage-Stats (`c001b37`,
+`45ba9b4`); `develop` spiegelt nur `main`. Fork liegt damit auf dem
+funktionalen Stand — nichts einzupflegen, Lock bleibt auf `559059e0`.
+
+Groundrule (unverändert): Nur Fixes in Kernbereichen (audio/loopback/sonar/EQ/
+wireplumber) lösen einen Backport aus; Clips/GUI-Umbau/Arctis-5/Bluetooth
+bleiben Dauer-Nein.
 
 ---
 
