@@ -135,3 +135,11 @@ def test_battery_shown_for_unknown_power_vocabulary():
     """Nova Elite's 'standby' is UNKNOWN, not OFF: don't drop the reading."""
     _, headset_bat, _ = _run_update_status(_status("standby", 73))
     assert headset_bat == 73
+
+
+def test_dac_wheel_never_written_to_a_sink():
+    """The wheel attenuates in the DAC; mirroring it into PipeWire attenuated
+    twice (#268). The daemon must not carry that sync any more."""
+    from arctis_sound_manager.core import CoreEngine
+
+    assert not hasattr(CoreEngine, "manage_station_volume_change")
