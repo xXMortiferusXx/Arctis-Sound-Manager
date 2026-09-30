@@ -898,6 +898,10 @@ def pw_node_exists(name: str, data: list | None = None) -> bool:
 _ASM_STREAM_PREFIXES = ("effect_output.", "effect_input.")
 _ASM_STREAM_NAMES = frozenset(
     f"Arctis_{ch}_sink_out" for ch in ("Game", "Chat", "Media", "Aux"))
+# Not ASM's, but plumbing all the same: SteamOS's WirePlumber wraps every ALSA
+# device in a loopback pair, and the alsa_loopback_stream.* half is what
+# actually feeds the headset. It carries no application.name either (#181).
+_SYSTEM_STREAM_PREFIXES = ("alsa_loopback_stream.", "alsa_loopback_device.")
 
 
 def is_asm_internal_stream(node_name: str) -> bool:
@@ -912,8 +916,13 @@ def is_asm_internal_stream(node_name: str) -> bool:
     start. Every clip and every game then stuttered, and cleaning the
     override file was the only way out. Mirrors home_page's
     ``_is_asm_internal_node`` for the mixer cards.
+
+    SteamOS's device loopbacks are here too (#181): the router learned
+    ``alsa_loopback_stream.<headset> -> Arctis_Media``, which feeds the
+    headset's own output back into a channel that plays into it. WirePlumber
+    cannot activate that cycle, so the headset received nothing at all.
     """
-    return (node_name.startswith(_ASM_STREAM_PREFIXES)
+    return (node_name.startswith(_ASM_STREAM_PREFIXES + _SYSTEM_STREAM_PREFIXES)
             or node_name in _ASM_STREAM_NAMES)
 
 
