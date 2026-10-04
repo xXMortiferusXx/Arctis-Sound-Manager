@@ -56,6 +56,11 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="1.4.27+fork.2" date="2026-10-05">
+      <description>
+        <p>Fork build (xXMortiferusXx). Backports the functional core fixes of upstream v1.4.28–v1.4.34: streams are re-attached to a recreated Game/Media loopback sink (#304), the GameDAC master wheel no longer mirrors into PipeWire (no double attenuation, #268), channel sinks are matched by exact name (#269), native streams move by object.serial (#291) and Steam games route to Arctis_Game, the Aux EQ output stays linked in the watchdog (#209), refused live EQ updates reload the chain (#181), plus USB wedged-device reset hardening (#271/#272/#299) and uaccess udev companion rules (#297). Clips, Bluetooth, Arctis 5, Arctis Pro Wireless, OLED overlays and the Master GUI card of upstream are not included.</p>
+      </description>
+    </release>
     <release version="1.4.27+fork.1" date="2026-09-21">
       <description>
         <p>Fork build (xXMortiferusXx). Backports the functional fixes of upstream v1.4.27: GameDAC master volume wheel now syncs to the default PipeWire sink and displays the correct direction, Sonar EQ gets headroom against clipping, router never treats ASM's own filter-chain nodes as applications (1.4.26 regression), stream-guard/router share one fixed singleton, output devices are silenced while the chain is rebuilt, and the tray quits without taking PipeWire down. The clip-recording feature of upstream v1.4.27 is not included.</p>

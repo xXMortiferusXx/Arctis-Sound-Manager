@@ -16,6 +16,7 @@ Dokumentation aller Änderungen, die wir an diesem Fork `xXMortiferusXx/Arctis-S
 | `0d24d531` | **chore: bump fork version** (anfangs `1.4.27-fork.1`, invalid) |
 | `55a7470d` | **fix: PEP 440 → `1.4.27+fork.1`** (wheel-Build-kompatibel; Backport siehe unten) |
 | `559059e0` | docs(memory): Übersichtstabelle + Backport-Merge vermerkt |
+| `439432c7` | **Upstream-1.4.28–v1.4.34-Backport — 20 Kern-Fixes (Branch `backport-1.4.34`)** |
 
 *Fett = die commits, die im finalen Fork live sind.*
 
@@ -146,6 +147,64 @@ grep -i "Virtual\|hesuvi" ~/.local/state/wireplumber/stream-properties
 - Der Aufruf erfolgt beim Daemon-Start in `core.py` (neben den anderen Quirks).
 - Version-Gate: WirePlumber ≥ 0.5 (`_MIN_WIREPLUMBER_VERSION`), ältere Versionen werden geskippt.
 - Idempotent: Bei unverändertem Inhalt kein Neustart von WirePlumber.
+
+---
+
+## 6. Upstream-1.4.28–v1.4.34-Backport (2026-10-05, Branch `backport-1.4.34`)
+
+### Kontext
+Upstream ist seit dem 1.4.27-Backport um 8 Releases weiter (v1.4.28 → v1.4.34,
+`main`-HEAD `f1f08dd7`). Eingespielt wurden **nur Kern-Fixes** (audio/loopback/
+routing/EQ/USB/update), keine Features. Grundlage war `git cherry -v main upstream/main`
+(135 fehlende Upstream-Commits), davon 20 ausgewählt.
+
+### Cherry-gepickte Upstream-Commits (topologisch, Fork-Hash ← Upstream)
+| Fork-Hash | Upstream | Beschreibung |
+|-----------|----------|--------------|
+| `75545d30` | `5c5048a5` | core: USB-Reset bei wedged device |
+| `0153b787` | `e3638c85` | routing: `ensure_card_profile` auf echte Sink-Präsenz |
+| `269f492f` | `3139e8c8` | core: redirect-on-connect-Ziel konfigurierbar (#273) |
+| `029b9470` | `6a85a1dc` | core: Aux-EQ-Output im Watchdog verlinkt (#209) |
+| `1335a590` | `3b9b8dbb` | core: jeden Command-Frame pacen (#271) |
+| `08cc5cf3` | `e6453cb2` | update: hängender Package-Manager (#274) |
+| `756a3c02` | `69fc3ab4` | core: ersten USB-Reset nach Boot nicht skippen (#272) |
+| `86ffcb2b` | `e6b98499` | gui: Tray-Restart bei `asm-gui --restart` (#277) |
+| `81e69ac1` | `63662743` | gui: Upgrade-Poll im Tray statt Hauptfenster |
+| `7092e3a9` | `20c330e5` | mixer: Channel-Sinks exakt matchen (#269) |
+| `13d28d5f` | `161460f0` | **GameDAC-Wheel nicht mehr spiegeln (#268)** |
+| `d7a3193c` | `ef3a2c3d` | **native Steam-Spiele → `Arctis_Game`** |
+| `acbf0aec` | `8bde0421` | crash-report: gegen gecrashte Version melden |
+| `97afe7de` | `d081529a` | mixer: Streams ohne `application.name` (#289) |
+| `2b0d62b3` | `e571436c` | gui: native Streams per `object.serial` (#291) |
+| `d815cad9` | `7e1cf34f` | **EQ: abgelehnte Live-Updates → Kette neu laden (#181)** |
+| `fc1636e3` | `df2d6894` | routing: SteamOS-ALSA-Loopback-Streams überspringen (#181) |
+| `9b12692a` | `f0db15a4` | uaccess: `70-steelseries-arctis-uaccess`-Rules (#297) |
+| `93663aed` | `a968dbbc` | usb: wedged-Device-Reset-Loop stoppen (#299) |
+| `439432c7` | `22949be1` | **Streams an recreated Game/Media-Loopback re-attachen (#304)** |
+
+### Fork-Anpassungen an 3 Patches (Konflikte)
+- **`13d28d5f` (#268):** Nur der Core-Teil übernommen (Mirroring + `manage_station_volume_change`
+  entfernt, `station_volume` aus `__init__`). Die GUI-Gauge am **Master-Card** (`set_hw_gauge`,
+  `home_page.py`) wurde verworfen — die Master-Card ist Teil des upstream-GUI-Umbaus v1.4.28
+  (`4464f788`), der per Groundrule nicht Teil des Forks ist. `tests/test_home_page_status_bar.py`
+  auf HEAD zurückgesetzt, nur der Check `manage_station_volume_change` existiert nicht mehr behalten.
+- **`7092e3a9` (#269):** `SINK_*` → `GAME_SINK_NAME`/… übernommen; die Master-Block-Ergänzung
+  (`self._master_card`, `_sync_chatmix_bar`) entfernt (keine Master-Card im Fork). Der tote
+  `_move_channel_streams_now` (in upstream vor 20c330e5 entfernt) nutzt jetzt die neuen Konstanten.
+- **`fc1636e3` (#181):** Docstring-Passage über den Clip-Recorder verworfen (Clips nicht im Fork);
+  SteamOS-Loopback-Passage und `_SYSTEM_STREAM_PREFIXES` übernommen.
+
+### Versionsnummer: `1.4.27+fork.2` (WICHTIG)
+- Gleiche Logik wie `+fork.1`: Fork bleibt funktional auf 1.4.27-Basis + ausgewählte Fixes,
+  nicht auf 1.4.34. Der Update-Checker stoppt weiterhin an `+fork.2` (kein Nag, keine falsche Wheel-URL).
+- `pyproject.toml` + Metainfo tragen `1.4.27+fork.2`.
+
+### Tests
+- Voll-Lauf (Branch): **2979 passed, 5 failed, 35 skipped**.
+- Die 5 Failures sind **vorbestehend** (identisch auf `main`): Clips-Opt-in/
+  Uninstall (`bash`-PATH), `gamebuds_battery_probe` (sysfs), `oled_renderer`
+  (Pillow-Version). Keine Regression durch den Backport.
+- Lauf braucht `libpulse` im `LD_LIBRARY_PATH` (venv findet es nicht selbst).
 
 ---
 
