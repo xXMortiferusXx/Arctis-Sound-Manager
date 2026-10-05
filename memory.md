@@ -17,6 +17,7 @@ Dokumentation aller Änderungen, die wir an diesem Fork `xXMortiferusXx/Arctis-S
 | `55a7470d` | **fix: PEP 440 → `1.4.27+fork.1`** (wheel-Build-kompatibel; Backport siehe unten) |
 | `559059e0` | docs(memory): Übersichtstabelle + Backport-Merge vermerkt |
 | `439432c7` | **Upstream-1.4.28–v1.4.34-Backport — 20 Kern-Fixes (Branch `backport-1.4.34`)** |
+| _(fork.3)_ | **Settings-Drift-Fix — RMW + Prozess-Lock für `general_settings.yaml` (Abschnitt 7)** |
 
 *Fett = die commits, die im finalen Fork live sind.*
 
@@ -205,6 +206,42 @@ routing/EQ/USB/update), keine Features. Grundlage war `git cherry -v main upstre
   Uninstall (`bash`-PATH), `gamebuds_battery_probe` (sysfs), `oled_renderer`
   (Pillow-Version). Keine Regression durch den Backport.
 - Lauf braucht `libpulse` im `LD_LIBRARY_PATH` (venv findet es nicht selbst).
+
+---
+
+## 7. Settings-Drift-Fix — Read-Modify-Write für `general_settings.yaml` (2026-10-05)
+
+**Symptom (Kumpel, `1.4.27+fork.1`):** Nach einer Änderung am Output-Gerät wurde
+`micro_input_source` von GameDAC auf den Onboard-Analog-Eingang
+(`alsa_input.pci-0000_00_1b.0.analog-stereo`) gezogen; 11 s später stellte der
+Watchdog die Mic-Kette darauf um, kurz darauf „no matchable ports … out=[]" →
+Mic komplett stumm.
+
+**Ursache:** `GeneralSettings.write_to_file()` schrieb immer das **komplette**
+In-Memory-Objekt (`self.__dict__`). Daemon (`core.py:324`) und GUI
+(`main_app.py:104`) laden `general_settings` je einmal und laden nie neu; ein
+einzelner Setting-Change eines Prozesses hat damit alle anderen Felder auf den
+Stand seines Snapshots zurückgesetzt — klassischer Config-Drift. Der Watchdog
+liest dagegen bei jedem Tick frisch von Platte (`sonar_to_pipewire.py:4116`),
+deshalb wurde der falsche Wert sofort wirksam. (Das „Notebook-Mic" war eine
+Fehldeutung: `pci-0000_00_1b.0` ist der Onboard-Intel-HDA-Eingang, den es auf
+Desktops genauso gibt.)
+
+**Fix (`settings.py`, fork-spezifisch):**
+- `GeneralSettings.__setattr__` + `_baseline`/`_dirty` markieren nur **tatsächlich
+  geänderte** Felder.
+- `write_to_file()` macht jetzt **Read-Modify-Write** unter
+  `_settings_file_lock` (fcntl.flock): Datei frisch lesen, nur geänderte Felder
+  überschreiben, unbekannte/nicht-geänderte Werte von Platte behalten, atomar
+  schreiben. Kein Call-Site muss angepasst werden.
+- `DeviceSettings` bleibt unverändert (kein Cross-Process-Writer-Problem).
+- Tests: `tests/test_settings_no_clobber.py` reproduziert das Klobbern zweier
+  Snapshots und prüft, dass es nicht mehr auftritt.
+
+**Offener Hinweis (nicht geändert):** `_auto_switch_mic` (`core.py:3489-3495`)
+schreibt in dasselbe Feld wie die manuelle Auswahl (`micro_input_source`) und
+stellt bei „Autoswitch aus" den manuellen Wert nicht wieder her. Eigenständiges
+Design-Thema; der Drift-Fix verhindert aber das unerwartete Wiederauftauchen.
 
 ---
 

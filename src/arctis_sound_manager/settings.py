@@ -2,16 +2,25 @@
 # Copyright (C) 2026 loteran — modifications
 # SPDX-License-Identifier: GPL-3.0-or-later
 
+import contextlib
 import logging
 import os
 from pathlib import Path
 from typing import Any
+
+try:  # POSIX only; the settings file is only ever written on Linux.
+    import fcntl
+except ImportError:  # pragma: no cover - Windows, where ASM does not run
+    fcntl = None  # type: ignore[assignment]
 
 from ruamel.yaml import YAML
 
 from arctis_sound_manager.config import ConfigSetting, SettingType
 from arctis_sound_manager.constants import SETTINGS_FOLDER
 from arctis_sound_manager.utils import JsonSerializable, ObservableDict
+
+#: Sentinel for "the class itself has no such attribute".
+_UNSET = object()
 
 
 def validate_config_setting_value(config: ConfigSetting, value: Any) -> bool:
@@ -63,6 +72,31 @@ def validate_config_setting_value(config: ConfigSetting, value: Any) -> bool:
     # No declared domain to check against, so refuse rather than accept an
     # unbounded value for a control nobody can even see.
     return False
+
+
+@contextlib.contextmanager
+def _settings_file_lock(path: Path):
+    """Serialize read-modify-write cycles across processes.
+
+    ``general_settings.yaml`` has several writers (the daemon, the GUI, the
+    tray). Without a lock, two writers that each re-read then write can still
+    interleave and lose one of the changes. The lock file is a sibling so the
+    settings file itself stays a single atomic rename target.
+    """
+    if fcntl is None:  # pragma: no cover - Windows
+        yield
+        return
+    lock_path = path.with_suffix(path.suffix + '.lock')
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        yield
+    finally:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+        finally:
+            os.close(fd)
 
 
 def _atomic_yaml_dump(data: dict, path: Path) -> None:
@@ -532,6 +566,30 @@ class GeneralSettings(JsonSerializable):
                 self.oled_display_order.append(key)
         # Remove obsolete keys no longer in the default order
         self.oled_display_order = [k for k in self.oled_display_order if k in self._DEFAULT_DISPLAY_ORDER]
+        # Change tracking (see __setattr__ / write_to_file): remember what this
+        # object was loaded with, so a write only pushes the fields that were
+        # deliberately changed and never resurrects a stale value another
+        # process has since updated on disk (issue: config drift from a
+        # full-snapshot save). Kept off the YAML because of the leading "_".
+        object.__setattr__(self, '_baseline', dict(self.__dict__))
+        object.__setattr__(self, '_dirty', set())
+        object.__setattr__(self, '_tracking', True)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        object.__setattr__(self, name, value)
+        if name.startswith('_') or not getattr(self, '_tracking', False):
+            return
+        # A field counts as changed only when it actually differs from what was
+        # loaded / last written, so re-setting the same value keeps a write from
+        # touching it (and re-clobbering a concurrent change).
+        if name in self._baseline:
+            same = self._baseline[name] == value
+        else:
+            same = getattr(type(self), name, _UNSET) == value
+        if same:
+            self._dirty.discard(name)
+        else:
+            self._dirty.add(name)
 
     @staticmethod
     def read_from_file() -> 'GeneralSettings':
@@ -584,9 +642,39 @@ class GeneralSettings(JsonSerializable):
 
     def write_to_file(self):
         settings_file = SETTINGS_FOLDER / 'general_settings.yaml'
+        logger = logging.getLogger(__name__)
 
-        # Atomic write: serialize to a sibling tempfile, fsync, then rename.
-        # Prevents the on-disk file from ever being half-written if the
-        # process is killed mid-flush (which used to make the next start
-        # fall back to defaults — now it won't).
-        _atomic_yaml_dump(self.__dict__, settings_file)
+        # Read-modify-write instead of dumping this object wholesale. A full
+        # dump from a long-lived in-memory snapshot (the daemon loads
+        # general_settings once, the GUI keeps its own copy) used to persist
+        # every field at the value it had when that process started — so one
+        # setting change could resurrect a stale, unrelated value another
+        # process had since fixed. Only fields this object actually changed
+        # (tracked in _dirty) overwrite the on-disk value; all others are kept
+        # as they are on disk, under a cross-process lock so two writers cannot
+        # interleave a read and a write.
+        excluded = set(getattr(self, '_js_exclude_fields', [])) | {
+            'settings_config', 'dac_settings_config',
+        }
+        known = [k for k in type(self).__annotations__
+                 if k not in excluded and not k.startswith('_')]
+        dirty = getattr(self, '_dirty', None)
+
+        with _settings_file_lock(settings_file):
+            raw = _load_yaml_with_backup(settings_file, logger=logger)
+            disk = raw if isinstance(raw, dict) else {}
+            merged: dict = {}
+            for key in known:
+                if key in self.__dict__:
+                    if dirty is not None and key in dirty:
+                        merged[key] = self.__dict__[key]
+                    elif key in disk:
+                        merged[key] = disk[key]
+                    else:
+                        merged[key] = self.__dict__[key]
+                elif key in disk:
+                    merged[key] = disk[key]
+            _atomic_yaml_dump(merged, settings_file)
+
+        object.__setattr__(self, '_baseline', dict(merged))
+        object.__setattr__(self, '_dirty', set())

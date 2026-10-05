@@ -56,6 +56,11 @@
   <content_rating type="oars-1.1" />
 
   <releases>
+    <release version="1.4.27+fork.3" date="2026-10-05">
+      <description>
+        <p>Fork build (xXMortiferusXx). Fixes settings drift: general_settings.yaml is now written read-modify-write with change tracking and a cross-process lock, so a single setting change from a long-lived in-memory snapshot (daemon or GUI) can no longer resurrect a stale, unrelated value — the path that had switched the Sonar Micro EQ input to the onboard analog mic and then silenced the mic chain.</p>
+      </description>
+    </release>
     <release version="1.4.27+fork.2" date="2026-10-05">
       <description>
         <p>Fork build (xXMortiferusXx). Backports the functional core fixes of upstream v1.4.28–v1.4.34: streams are re-attached to a recreated Game/Media loopback sink (#304), the GameDAC master wheel no longer mirrors into PipeWire (no double attenuation, #268), channel sinks are matched by exact name (#269), native streams move by object.serial (#291) and Steam games route to Arctis_Game, the Aux EQ output stays linked in the watchdog (#209), refused live EQ updates reload the chain (#181), plus USB wedged-device reset hardening (#271/#272/#299) and uaccess udev companion rules (#297). Clips, Bluetooth, Arctis 5, Arctis Pro Wireless, OLED overlays and the Master GUI card of upstream are not included.</p>
